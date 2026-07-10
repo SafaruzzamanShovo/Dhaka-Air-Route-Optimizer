@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Find air-quality-aware routes in Dhaka. Compare routes by distance, AQI, PM2.5, PM10, CO, O3, and SO2.">
+    <h1>Dhaka AQI Route Optimizer</h1>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    {% csrf_token %}
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                    <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                </svg>
+                <h1>Kolkata AQI Route Optimizer</h1>
+            </div>
+            <div class="header-info">
+                <span class="powered-by"></span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+
+            <!-- Comparison Panel -->
+            <div id="comparisonPanel" class="panel" style="display: none; overflow-y: auto;">
+                <div class="panel-header">
+                    <h3>📊 Route Comparison</h3>
+                    <button onclick="clearComparison()" class="panel-close-btn">×</button>
+                </div>
+                <div id="comparisonList"></div>
+            </div>
+
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="search-section">
+                    <h2>Find Optimal Route</h2>
+                    
+                    <div class="input-group">
+                        <label for="source">Source Location</label>
+                        <input type="text" id="source" placeholder="E.g., Dhanmondi, Dhaka"" />
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="destination">Destination Location</label>
+                        <input type="text" id="destination" placeholder="E.g., Gulshan, Dhaka" />
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="priority">Route Priority</label>
+                        <select id="priority">
+                            <option value="balanced">Balanced (Distance + AQI)</option>
+                            <option value="shortest">Shortest Distance</option>
+                            <option value="cleanest">Cleanest Air</option>
+                            <option value="pm25">Minimum PM2.5</option>
+                            <option value="pm10">Minimum PM10</option>
+                            <option value="co">Minimum CO</option>
+                            <option value="o3">Minimum O3</option>
+                            <option value="so2">Minimum SO2</option>
+                        </select>
+                    </div>
+                    
+                    <button class="btn btn-primary" id="findRouteBtn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="M21 21l-4.35-4.35"></path>
+                        </svg>
+                        Find Route
+                    </button>
+
+                    <button id="compareAllBtn" class="btn btn-secondary" style="margin-top: 10px;">
+                        📊 Compare All Routes
+                    </button>
+                </div>
+                
+                <!-- Route Information -->
+                <div class="route-info" id="routeInfo" style="display: none;">
+                    <h3>Route Details</h3>
+                    
+                    <div class="info-item">
+                        <span class="label">Priority:</span>
+                        <span class="value" id="routePriority">-</span>
+                    </div>
+                    
+                    <div class="info-item">
+                        <span class="label">Distance:</span>
+                        <span class="value" id="distance">-</span>
+                    </div>
+                    
+                    <div class="info-item">
+                        <span class="label">Duration:</span>
+                        <span class="value" id="duration">-</span>
+                    </div>
+                    
+                    <div class="info-item">
+                        <span class="label">Average AQI:</span>
+                        <span class="value aqi-badge" id="avgAqi">-</span>
+                    </div>
+                    
+                    <div class="info-item">
+                        <span class="label">AQI Status:</span>
+                        <span class="value" id="aqiStatus">-</span>
+                    </div>
+                </div>
+                
+                <!-- Pollutant Details -->
+                <div class="pollutant-details" id="pollutantDetails" style="display: none;">
+                    <h3>Air Quality Breakdown</h3>
+                    <div class="pollutant-list" id="pollutantList">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+                
+                <!-- Route Waypoints -->
+                <div class="waypoint-details" id="waypointDetails" style="display: none;">
+                    <h3>Route Checkpoints</h3>
+                    <div class="waypoint-scroll" id="waypointList">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+                
+                <!-- AQI Legend -->
+                <div class="aqi-legend">
+                    <h3>AQI Categories</h3>
+                    <div class="legend-item">
+                        <span class="color-box" style="background: #00e400;"></span>
+                        <span>0-50: Good</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="color-box" style="background: #ffff00;"></span>
+                        <span>51-100: Moderate</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="color-box" style="background: #ff7e00;"></span>
+                        <span>101-150: Unhealthy (Sensitive)</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="color-box" style="background: #ff0000;"></span>
+                        <span>151-200: Unhealthy</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="color-box" style="background: #8f3f97;"></span>
+                        <span>201-300: Very Unhealthy</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="color-box" style="background: #7e0023;"></span>
+                        <span>300+: Hazardous</span>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Map Container -->
+            <main class="map-container">
+                <div id="map"></div>
+                <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Finding the best route in Dhaka...</p>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{% static 'js/map.js' %}"></script>
+</body>
+</html>
